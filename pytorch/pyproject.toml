@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "avseg-research"
+version = "0.1.0"
+description = "Attention-WNet inference and a separate deep-supervised Attention-U-Net research model"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26,<3", "torch>=2.5,<3", "opencv-python-headless>=4.8,<5"]
+
+[project.scripts]
+avseg-predict = "avseg.predict:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["avseg*"]

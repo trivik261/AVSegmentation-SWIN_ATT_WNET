@@ -1,3 +1,83 @@
+# Retinal artery–vein segmentation: Attention-WNet and Swin-WNet
+
+Research implementations for retinal fundus images, with a legacy TensorFlow/Keras notebook and a new PyTorch inference package.
+
+[Paper: Artery-Vein Segmentation from Fundus Images using Deep Learning](https://arxiv.org/abs/2510.03717) — arXiv preprint, 2025.
+
+## Start here
+
+| Implementation | Framework | Output / supervision | Status |
+| --- | --- | --- | --- |
+| Original Attention-WNet / Swin-WNet notebook | TensorFlow/Keras | Final cascade prediction | Historical notebook; Kaggle-specific paths |
+| V11 Attention-WNet | PyTorch | Vessel probabilities, then A/V probabilities; supervision of both cascade stages | Model source preserved; image-only inference added |
+| Attention-U-Net with deep supervision | PyTorch | Final logits plus an intermediate decoder prediction | Separate experimental architecture; no trained checkpoint supplied |
+
+**Supervising two cascade outputs and supervising intermediate decoder heads are different.** The deep-supervised Attention-U-Net is not a drop-in replacement for V11 Attention-WNet checkpoints.
+
+## Run image-only inference
+
+Use Python 3.10 or later. From the repository root:
+
+```bash
+python -m venv .venv
+# Linux/macOS: source .venv/bin/activate
+# Windows PowerShell: .\.venv\Scripts\Activate.ps1
+python -m pip install -e ./pytorch
+avseg-predict --checkpoint /path/to/model_best.pth --image /path/to/fundus.png --dataset RITE --output /path/to/new-output --device cpu
+```
+
+Supply a **V11-compatible checkpoint**: six input channels, two vessel classes, three A/V classes, and encoder widths 32/64/128/256/512. Weights are not included in this update. A missing or incompatible checkpoint fails rather than producing random-weight results.
+
+Choose the dataset explicitly: historical V11 denoising applies to `RITE`, `RAV`, and `Fundus-AVSeg`; use `custom` for a new image without that denoising. This choice is recorded in the output.
+
+The predictor:
+- Builds green-CLAHE, OpenCV LAB, and full-image y/x coordinate channels.
+- Blends overlapping patch **probabilities without a second softmax**.
+- Uses **predicted** vessels to gate A/V labels; no ground-truth mask is required.
+- Writes full-resolution vessel masks, A/V labels, RGB predictions, overlays, and a provenance JSON containing input/checkpoint hashes and settings.
+
+This is an inference implementation, not a clinical validation claim. See [model status and evaluation limits](docs/MODEL_STATUS.md).
+
+## Inspect decoder deep supervision
+
+```python
+import torch
+from avseg.attention_unet_ds import AttentionUNet
+from avseg.supervision import supervised_loss
+
+model = AttentionUNet(in_channels=1, out_channels=2, deep_supervision=True)
+image = torch.randn(2, 1, 64, 64)
+target = torch.zeros(2, 64, 64, dtype=torch.long)
+logits, auxiliary_logits = model(image)
+loss = supervised_loss(logits, auxiliary_logits, target,
+                       torch.nn.CrossEntropyLoss(), auxiliary_weight=0.4)
+loss.backward()
+```
+
+The auxiliary head receives an intermediate decoder feature at quarter resolution and upsamples its prediction. At inference, use final logits. This example demonstrates the training connection; it does not establish trained accuracy or an improvement over the cascade.
+
+## Checks
+
+```bash
+python -m unittest discover -s pytorch/tests -v
+```
+
+Checks cover patch edges, global coordinates, probability preservation, predicted-vessel gating, missing checkpoints, preprocessing channels, cascade output contracts, and auxiliary-head gradients. GitHub Actions installs PyTorch/OpenCV and runs the checks. Tests requiring an absent optional dependency report a skip.
+
+## Results and reproducibility
+
+The supplied local audit found compatible V11 weights, but no checkpoints or image datasets were included in the handoff to this update. Historical results used nominal test data for validation and model selection; they are not an independent held-out test benchmark.
+
+Next release requirements:
+1. Record independent training/validation/test identities, including augmentation-parent and patient/eye grouping where available.
+2. Evaluate a checkpoint with locked preprocessing, label mapping, split manifest, and hashes.
+3. Publish artery/vein Dice or F1, vessel detection, and qualitative overlays with explicit evaluation regions.
+4. Report the decoder-supervision experiment separately from the original cascade.
+
+The original notebook and dataset tree are retained. This update does not add the local GNN or AVR research pipeline.
+
+## Legacy architecture notes
+
 # Artery Vein Segmentation using Attention-WNet and SWIN-WNet model:
 
 ## Attention-WNet:
@@ -19,6 +99,7 @@ The Swin-UNet blocks' output is then passed into the WNet decoder, which generat
 ## Datasets used: 
 - DRIVE: https://drive.grand-challenge.org
 - HRF: https://www5.cs.fau.de/research/data/fundus-images/
+
 
 
 
